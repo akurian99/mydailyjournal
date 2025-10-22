@@ -369,16 +369,11 @@
     </div>
 
     <!-- 
-      FILE 2: CONFIG.JS 
-      This file will hold your secret Firebase configuration.
+      FIX: Load config.js first, making 'firebaseConfig' global.
+      Load app.js second as a module to handle imports.
     -->
-    <script type="module" src="config.js"></script>
-    
-    <!-- 
-      FILE 3: APP.JS
-      This file will hold all the application logic.
-    -->
+    <script src="config.js"></script>
     <script type="module" src="app.js"></script>
+
 </body>
 </html>
-
