@@ -1,7 +1,7 @@
 // --- IMPORTS ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, doc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, doc, setDoc, updateDoc } from "https-://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 // --- GLOBAL VARIABLES ---
 let foodLog = [], activityLog = [], symptomLog = [], db, auth, userId;
@@ -50,7 +50,6 @@ const foodDatabase = {
     'beer': { keywords: ['beer'], unit: '12oz', cal: 150, na: 10, sat_fat: 0, fat: 0, protein: 1.5, potassium: 100, added_sugar: 0, fiber: 0, purine: 'High', alcohol: 1, swap: 'Swap for sparkling water with lime to avoid alcohol and purines.' },
     'coke': { keywords: ['coke', 'soda', 'cola'], unit: '12oz', cal: 140, na: 45, sat_fat: 0, fat: 0, protein: 0, potassium: 10, added_sugar: 39, fiber: 0, purine: 'High', swap: 'Switch to diet soda or, ideally, flavored sparkling water to avoid sugar.' },
     'water': { keywords: ['water'], unit: 'glass', cal: 0, na: 0, sat_fat: 0, fat: 0, protein: 0, potassium: 0, added_sugar: 0, fiber: 0, purine: 'Low', swap: 'Perfect for hydration, which helps manage uric acid.' },
-    // **FIX:** Added 'chicken' as a keyword
     'grilled chicken': { keywords: ['grilled chicken', 'chicken breast', 'chicken'], unit: 'oz', cal: 45, na: 20, sat_fat: 0.3, fat: 1, protein: 9, potassium: 70, added_sugar: 0, fiber: 0, purine: 'Moderate', swap: 'Excellent lean protein choice. Be mindful of high-sodium marinades.'},
     'fried chicken': { keywords: ['fried chicken'], unit: 'piece', cal: 300, na: 700, sat_fat: 7, fat: 18, protein: 25, potassium: 250, added_sugar: 0, fiber: 1, purine: 'Moderate', swap: 'Grilled or baked chicken is a much healthier option to reduce sodium and saturated fat.'},
     'roast chicken': { keywords: ['roast chicken', 'roasted chicken'], unit: 'oz', cal: 50, na: 25, sat_fat: 0.5, fat: 2, protein: 8, potassium: 65, added_sugar: 0, fiber: 0, purine: 'Moderate', swap: 'Great choice! Remove the skin to lower saturated fat content.'},
@@ -74,7 +73,6 @@ const foodDatabase = {
     'rice': { keywords: ['rice', 'white rice'], unit: 'cup', cal: 205, na: 5, sat_fat: 0.1, fat: 0.4, protein: 4, potassium: 55, added_sugar: 0, fiber: 0.6, purine: 'Low', swap: 'Choose brown rice for significantly more fiber and nutrients.' },
     'brown rice': { keywords: ['brown rice'], unit: 'cup', cal: 215, na: 10, sat_fat: 0.4, fat: 1.8, protein: 5, potassium: 150, added_sugar: 0, fiber: 3.5, purine: 'Low', swap: 'Excellent choice for fiber.' },
     'pasta': { keywords: ['pasta'], unit: 'cup', cal: 220, na: 1, sat_fat: 0.2, fat: 1.3, protein: 8, potassium: 120, added_sugar: 0, fiber: 2.5, purine: 'Low', swap: 'Opt for whole wheat pasta for more fiber and pair with a veggie-based sauce.' },
-    // **NEW:** Added combination foods
     'spaghetti and meatballs': { keywords: ['spaghetti and meatballs', 'spaghetti meatballs'], unit: 'cup', cal: 380, na: 900, sat_fat: 7, fat: 16, protein: 20, potassium: 550, added_sugar: 8, fiber: 4, purine: 'Moderate', swap: 'Use whole wheat pasta and lean meatballs.' },
     'chicken alfredo': { keywords: ['chicken alfredo', 'chicken fettuccine', 'chicken pasta'], unit: 'cup', cal: 600, na: 950, sat_fat: 22, fat: 38, protein: 28, potassium: 350, added_sugar: 2, fiber: 2, purine: 'Moderate', swap: 'A very high-fat dish. Try grilled chicken with a tomato-based sauce instead.' },
     'macaroni and cheese': { keywords: ['macaroni and cheese', 'mac and cheese'], unit: 'cup', cal: 350, na: 750, sat_fat: 10, fat: 18, protein: 12, potassium: 150, added_sugar: 3, fiber: 2, purine: 'Low', swap: 'Use whole wheat pasta and low-fat cheese to reduce fat and sodium.' },
@@ -523,7 +521,7 @@ async function getFoodFromImage(base64ImageData, mimeType) {
                  ? geminiApiKey 
                  : (typeof __google_api_key !== 'undefined' ? __google_api_key : "");
     
-    if ((!apiKey || apiKey === "YOUR_GEMINI_API_KEY") && typeof firebaseConfig !== 'undefined' && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+    if ((!apiKey || apiKey === "YOUR_GEMINI_API_KEY") && typeof firebaseConfig !== 'undefined' && firebaseConfig.apiKey !== "YOUR_API_KEY" && (typeof __google_api_key == 'undefined' || !__google_api_key)) {
          // Try to get the key from the Firebase config as a last resort IF gemini key is not set
         apiKey = firebaseConfig.apiKey;
     }
@@ -532,8 +530,8 @@ async function getFoodFromImage(base64ImageData, mimeType) {
         throw new Error("API key is missing. Please add your Gemini API key to the `geminiApiKey` variable in config.js.");
     }
 
-    // **FIX:** Using the correct model for this task
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=${apiKey}`;
+    // **FIX:** Using the gemini-2.5-flash-preview-09-2025 model as requested
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
     const payload = { contents: [{ parts: [{ text: "You are a nutritional analyst. Your task is to identify all food items in this image. List them as a simple comma-separated string, e.g., 'sirloin steak, mashed potatoes, spinach, roti, dal'." }, { inlineData: { mimeType, data: base64ImageData } }] }] };
     
     const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -554,7 +552,7 @@ async function analyzeNutritionLabel(base64ImageData, mimeType) {
                  ? geminiApiKey 
                  : (typeof __google_api_key !== 'undefined' ? __google_api_key : "");
     
-    if ((!apiKey || apiKey === "YOUR_GEMINI_API_KEY") && typeof firebaseConfig !== 'undefined' && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+    if ((!apiKey || apiKey === "YOUR_GEMINI_API_KEY") && typeof firebaseConfig !== 'undefined' && firebaseConfig.apiKey !== "YOUR_API_KEY" && (typeof __google_api_key == 'undefined' || !__google_api_key)) {
          // Try to get the key from the Firebase config as a last resort IF gemini key is not set
         apiKey = firebaseConfig.apiKey;
     }
@@ -563,8 +561,8 @@ async function analyzeNutritionLabel(base64ImageData, mimeType) {
         throw new Error("API key is missing. Please add your Gemini API key to the `geminiApiKey` variable in config.js.");
     }
 
-    // **FIX:** Using the correct model for this task
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=${apiKey}`;
+    // **FIX:** Using the gemini-2.5-flash-preview-09-2025 model as requested
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
     const payload = {
         contents: [{
             parts: [
