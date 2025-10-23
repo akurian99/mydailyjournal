@@ -523,9 +523,9 @@ async function getFoodFromImage(base64ImageData, mimeType) {
                  ? geminiApiKey 
                  : (typeof __google_api_key !== 'undefined' ? __google_api_key : "");
     
-    if (!apiKey || apiKey === "YOUR_GEMINI_API_KEY") {
+    if ((!apiKey || apiKey === "YOUR_GEMINI_API_KEY") && typeof firebaseConfig !== 'undefined' && firebaseConfig.apiKey !== "YOUR_API_KEY") {
          // Try to get the key from the Firebase config as a last resort IF gemini key is not set
-        apiKey = (typeof firebaseConfig !== 'undefined' && firebaseConfig.apiKey !== "YOUR_API_KEY") ? firebaseConfig.apiKey : "";
+        apiKey = firebaseConfig.apiKey;
     }
 
     if (!apiKey || apiKey === "YOUR_GEMINI_API_KEY" || apiKey === "YOUR_API_KEY") {
@@ -554,7 +554,7 @@ async function analyzeNutritionLabel(base64ImageData, mimeType) {
                  ? geminiApiKey 
                  : (typeof __google_api_key !== 'undefined' ? __google_api_key : "");
     
-    if (!apiKey && typeof firebaseConfig !== 'undefined' && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+    if ((!apiKey || apiKey === "YOUR_GEMINI_API_KEY") && typeof firebaseConfig !== 'undefined' && firebaseConfig.apiKey !== "YOUR_API_KEY") {
          // Try to get the key from the Firebase config as a last resort IF gemini key is not set
         apiKey = firebaseConfig.apiKey;
     }
