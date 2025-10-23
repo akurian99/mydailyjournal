@@ -8,3 +8,4 @@ const firebaseConfig = {
   appId: "1:1076045369377:web:11d1d5db1959c639ec5360",
   measurementId: "G-G7LTYZ343K"
 };
+const geminiApiKey = "AIzaSyBtlvq9B_ubvOSkqRB0wj8oikgPHFvCnf4";
