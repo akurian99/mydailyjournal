@@ -132,7 +132,7 @@ const healthTips = [
 ];
 
 // --- DOM BINDING ---
-// **FIX:** This logic is now moved inside the DOMContentLoaded listener
+// **FIX:** This variable is now declared globally but defined inside the listener
 let dom;
 
 // --- FIREBASE & INITIALIZATION ---
