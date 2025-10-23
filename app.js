@@ -1,10 +1,9 @@
-// --- FILE 2: app.js ---
-// Import all Firebase functions and config
+// --- IMPORTS ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, doc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { firebaseConfig, appId } from './config.js'; // Import config
 
+// --- GLOBAL VARIABLES ---
 let foodLog = [], activityLog = [], symptomLog = [], db, auth, userId;
 let currentPhotoBase64 = null;
 let currentEditInfo = { id: null, type: null };
@@ -17,9 +16,13 @@ let userProfile = {
     },
     heightFt: null, heightIn: null, weightLbs: null, calorieGoal: 2200
 };
+// Use a default app ID if not provided by the environment
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+let recognition;
+let isListening = false;
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-// --- DATABASE & HEALTH CONSTANTS ---
-
+// --- DATA: Food Database ---
 const foodDatabase = {
     'oatmeal': { keywords: ['oatmeal', 'oats'], unit: 'cup', cal: 150, na: 5, sat_fat: 0.5, fat: 2.5, protein: 5, potassium: 140, added_sugar: 0, fiber: 4, purine: 'Low', swap: 'Great choice! Using steel-cut or rolled oats maximizes fiber.' },
     'blueberry': { keywords: ['blueberry', 'blueberries'], unit: 'cup', cal: 85, na: 1, sat_fat: 0, fat: 0.5, protein: 1, potassium: 110, added_sugar: 0, fiber: 3.6, purine: 'Low', swap: 'Perfect addition. Berries are great for antioxidants.' },
@@ -47,7 +50,8 @@ const foodDatabase = {
     'beer': { keywords: ['beer'], unit: '12oz', cal: 150, na: 10, sat_fat: 0, fat: 0, protein: 1.5, potassium: 100, added_sugar: 0, fiber: 0, purine: 'High', alcohol: 1, swap: 'Swap for sparkling water with lime to avoid alcohol and purines.' },
     'coke': { keywords: ['coke', 'soda', 'cola'], unit: '12oz', cal: 140, na: 45, sat_fat: 0, fat: 0, protein: 0, potassium: 10, added_sugar: 39, fiber: 0, purine: 'High', swap: 'Switch to diet soda or, ideally, flavored sparkling water to avoid sugar.' },
     'water': { keywords: ['water'], unit: 'glass', cal: 0, na: 0, sat_fat: 0, fat: 0, protein: 0, potassium: 0, added_sugar: 0, fiber: 0, purine: 'Low', swap: 'Perfect for hydration, which helps manage uric acid.' },
-    'grilled chicken': { keywords: ['grilled chicken', 'chicken breast'], unit: 'oz', cal: 45, na: 20, sat_fat: 0.3, fat: 1, protein: 9, potassium: 70, added_sugar: 0, fiber: 0, purine: 'Moderate', swap: 'Excellent lean protein choice. Be mindful of high-sodium marinades.'},
+    // **FIX:** Added 'chicken' as a keyword
+    'grilled chicken': { keywords: ['grilled chicken', 'chicken breast', 'chicken'], unit: 'oz', cal: 45, na: 20, sat_fat: 0.3, fat: 1, protein: 9, potassium: 70, added_sugar: 0, fiber: 0, purine: 'Moderate', swap: 'Excellent lean protein choice. Be mindful of high-sodium marinades.'},
     'fried chicken': { keywords: ['fried chicken'], unit: 'piece', cal: 300, na: 700, sat_fat: 7, fat: 18, protein: 25, potassium: 250, added_sugar: 0, fiber: 1, purine: 'Moderate', swap: 'Grilled or baked chicken is a much healthier option to reduce sodium and saturated fat.'},
     'roast chicken': { keywords: ['roast chicken', 'roasted chicken'], unit: 'oz', cal: 50, na: 25, sat_fat: 0.5, fat: 2, protein: 8, potassium: 65, added_sugar: 0, fiber: 0, purine: 'Moderate', swap: 'Great choice! Remove the skin to lower saturated fat content.'},
     'chicken curry': { keywords: ['chicken curry'], unit: 'cup', cal: 380, na: 800, sat_fat: 10, fat: 22, protein: 25, potassium: 500, added_sugar: 4, fiber: 4, purine: 'Moderate', swap: 'A lighter, broth-based curry is a healthier alternative to creamy ones.'},
@@ -70,6 +74,10 @@ const foodDatabase = {
     'rice': { keywords: ['rice', 'white rice'], unit: 'cup', cal: 205, na: 5, sat_fat: 0.1, fat: 0.4, protein: 4, potassium: 55, added_sugar: 0, fiber: 0.6, purine: 'Low', swap: 'Choose brown rice for significantly more fiber and nutrients.' },
     'brown rice': { keywords: ['brown rice'], unit: 'cup', cal: 215, na: 10, sat_fat: 0.4, fat: 1.8, protein: 5, potassium: 150, added_sugar: 0, fiber: 3.5, purine: 'Low', swap: 'Excellent choice for fiber.' },
     'pasta': { keywords: ['pasta'], unit: 'cup', cal: 220, na: 1, sat_fat: 0.2, fat: 1.3, protein: 8, potassium: 120, added_sugar: 0, fiber: 2.5, purine: 'Low', swap: 'Opt for whole wheat pasta for more fiber and pair with a veggie-based sauce.' },
+    // **NEW:** Added combination foods
+    'spaghetti and meatballs': { keywords: ['spaghetti and meatballs', 'spaghetti meatballs'], unit: 'cup', cal: 380, na: 900, sat_fat: 7, fat: 16, protein: 20, potassium: 550, added_sugar: 8, fiber: 4, purine: 'Moderate', swap: 'Use whole wheat pasta and lean meatballs.' },
+    'chicken alfredo': { keywords: ['chicken alfredo', 'chicken fettuccine', 'chicken pasta'], unit: 'cup', cal: 600, na: 950, sat_fat: 22, fat: 38, protein: 28, potassium: 350, added_sugar: 2, fiber: 2, purine: 'Moderate', swap: 'A very high-fat dish. Try grilled chicken with a tomato-based sauce instead.' },
+    'macaroni and cheese': { keywords: ['macaroni and cheese', 'mac and cheese'], unit: 'cup', cal: 350, na: 750, sat_fat: 10, fat: 18, protein: 12, potassium: 150, added_sugar: 3, fiber: 2, purine: 'Low', swap: 'Use whole wheat pasta and low-fat cheese to reduce fat and sodium.' },
     'quinoa': { keywords: ['quinoa'], unit: 'cup', cal: 222, na: 13, sat_fat: 0.5, fat: 3.6, protein: 8, potassium: 318, added_sugar: 0, fiber: 5, purine: 'Low', swap: 'A fantastic complete protein and high-fiber grain.' },
     'broccoli': { keywords: ['broccoli'], unit: 'cup', cal: 55, na: 50, sat_fat: 0.1, fat: 0.6, protein: 4, potassium: 450, added_sugar: 0, fiber: 5, purine: 'Low', swap: 'Great choice! Steaming is a great way to preserve nutrients.' },
     'carrots': { keywords: ['carrots', 'carrot'], unit: 'cup', cal: 52, na: 88, sat_fat: 0.1, fat: 0.3, protein: 1, potassium: 410, added_sugar: 0, fiber: 3.6, purine: 'Low', swap: 'Excellent source of Vitamin A.' },
@@ -107,7 +115,7 @@ const foodDatabase = {
     'milk': { keywords: ['milk', 'low-fat milk'], unit: 'cup', cal: 102, na: 107, sat_fat: 1.5, fat: 2.4, protein: 8, potassium: 382, added_sugar: 12, fiber: 0, purine: 'Low', swap: 'A great source of calcium and protein. Opt for low-fat or skim milk.' },
     'wine': { keywords: ['wine', 'red wine', 'white wine'], unit: '5oz glass', cal: 125, na: 6, sat_fat: 0, fat: 0, protein: 0.1, potassium: 127, added_sugar: 1.4, fiber: 0, purine: 'Low', alcohol: 1, swap: 'Moderation is key. Alcohol can trigger gout and add empty calories.' },
 };
-
+// --- DATA: Goals & Tips ---
 const healthGoals = { sodium: 2000, added_sugar: 36, sat_fat: 22, calories: 2200, protein: 50, potassium: 3400, fat: 65 };
 const metricLabels = { calories: "Calories", sodium: "Sodium", added_sugar: "Added Sugar", sat_fat: "Saturated Fat", fat: "Total Fat", protein: "Protein", fiber: "Fiber", potassium: "Potassium", purine: "Purine Verdict", alcohol: "Alcohol" };
 const healthTips = [
@@ -118,108 +126,76 @@ const healthTips = [
     "Control blood sugar by choosing whole grains (like brown rice) over refined grains (like white bread). The fiber slows down sugar absorption.",
     "Protect your kidneys by managing blood pressure and blood sugar. A balanced diet low in sodium is crucial.",
     "To lower saturated fat intake, trim visible fat from meats, choose lean protein sources like chicken breast or fish, and use olive oil for cooking.",
-    "Increase your potassium intake with foods like bananas, potatoes, and spinach. Potassium helps your body get rid of excess sodium.",
+    "Increase your potassium intake with foods like bananas, potatoes, and spinach. Potassium helps your body get of excess sodium.",
     "Limit sugary drinks like sodas and juices. They are a major source of added sugars and can contribute to weight gain and other health issues.",
     "Staying well-hydrated is key for kidney health and can help your body flush out excess uric acid, which is important for managing gout."
 ];
 
-// --- DOM ELEMENT MAP ---
-// We define all DOM elements here for easy access
-const dom = {
-    loaderContainer: document.getElementById('loader-container'),
-    appContent: document.getElementById('app-content'),
-    greeting: document.getElementById('greeting'),
-    calorieTracker: {
-        goal: document.getElementById('calorie-goal-display'),
-        eaten: document.getElementById('calorie-eaten-display'),
-        left: document.getElementById('calorie-left-display'),
-    },
-    profilePic: { img: document.getElementById('profile-pic-img'), placeholder: document.getElementById('profile-pic-placeholder'), input: document.getElementById('profile-pic-input') },
-    tabs: document.querySelectorAll('.tab-btn'),
-    panels: document.querySelectorAll('.tab-panel'),
-    manualLog: { input: document.getElementById('food-input'), autocompleteList: document.getElementById('autocomplete-list'), button: document.getElementById('log-button'), micButton: document.getElementById('mic-button'), micText: document.getElementById('mic-text'), micIcon: document.getElementById('mic-icon'), confirmationPanel: document.getElementById('meal-confirmation-panel'), confirmationItemsContainer: document.getElementById('confirmation-items-container'), confirmLogButton: document.getElementById('confirm-log-button'), cancelLogButton: document.getElementById('cancel-log-button'), title: document.getElementById('meal-panel-title'), mealTypeSelector: document.getElementById('meal-type-selector') },
-    photoLog: { uploader: document.getElementById('photo-uploader'), loader: document.getElementById('photo-loader-container'), input: document.getElementById('photo-input'), fileName: document.getElementById('file-name'), button: document.getElementById('analyze-photo-button') },
-    pantryLog: { uploader: document.getElementById('pantry-uploader'), loader: document.getElementById('pantry-loader-container'), input: document.getElementById('pantry-photo-input'), fileName: document.getElementById('pantry-file-name'), button: document.getElementById('analyze-pantry-button') },
-    activityLog: { input: document.getElementById('activity-input'), button: document.getElementById('log-activity-button'), container: document.getElementById('activity-log-container') },
-    summaries: { dailyBtn: document.getElementById('daily-summary-button'), weeklyBtn: document.getElementById('weekly-summary-button'), modal: document.getElementById('summary-modal'), content: document.getElementById('summary-content'), closeBtn: document.getElementById('close-modal') },
-    symptom: { logBtn: document.getElementById('log-symptom-button'), modal: document.getElementById('symptom-modal'), title: document.getElementById('symptom-modal-title'), description: document.getElementById('symptom-description'), severity: document.getElementById('symptom-severity'), severityValue: document.getElementById('severity-value'), saveBtn: document.getElementById('save-symptom-button'), cancelBtn: document.getElementById('cancel-symptom-button'), container: document.getElementById('symptom-log-container') },
-    activityEdit: { modal: document.getElementById('activity-edit-modal'), description: document.getElementById('activity-edit-description'), saveBtn: document.getElementById('save-activity-edit-button'), cancelBtn: document.getElementById('cancel-activity-edit-button')},
-    logTabs: document.querySelectorAll('.log-tab-btn'),
-    logPanels: { meal: document.getElementById('log-container'), activity: document.getElementById('activity-log-container'), symptom: document.getElementById('symptom-log-container') },
-    settings: { 
-        button: document.getElementById('settings-button'), 
-        modal: document.getElementById('settings-modal'), 
-        options: document.getElementById('settings-options'), 
-        closeButton: document.getElementById('close-settings-button'),
-        nameInput: document.getElementById('name-input'),
-        heightFt: document.getElementById('height-ft'),
-        heightIn: document.getElementById('height-in'),
-        weightLbs: document.getElementById('weight-lbs'),
-        bmiValue: document.getElementById('bmi-value'),
-        calorieGoal: document.getElementById('calorie-goal'),
-        recommendedCalories: document.getElementById('recommended-calories'),
-        profileTab: document.getElementById('settings-tab-profile'),
-        monitoringTab: document.getElementById('settings-tab-monitoring'),
-        profilePanel: document.getElementById('settings-panel-profile'),
-        monitoringPanel: document.getElementById('settings-panel-monitoring'),
-    },
-    motivation: document.getElementById('daily-motivation'),
-    highRiskAlert: { modal: document.getElementById('high-risk-alert-modal'), content: document.getElementById('high-risk-alert-content'), closeBtn: document.getElementById('close-high-risk-alert') },
-    pantryScanResults: { modal: document.getElementById('pantry-scan-results-modal'), content: document.getElementById('pantry-scan-results-content'), closeBtn: document.getElementById('close-pantry-scan-results') },
-};
+// --- DOM BINDING ---
+// **FIX:** This logic is now moved inside the DOMContentLoaded listener
+let dom;
 
-// --- FIREBASE & AUTH ---
+// --- FIREBASE & INITIALIZATION ---
 
 async function setupFirebase() {
     try {
-        // Check if config is still placeholder
-        if (firebaseConfig.apiKey === "YOUR_API_KEY") {
+        let app;
+        
+        // **FIX:** This logic now correctly reads from config.js
+        // It checks if the global 'firebaseConfig' variable exists and is not the placeholder.
+        if (typeof firebaseConfig === 'undefined' || firebaseConfig.apiKey === "YOUR_API_KEY") {
+            // Check for environment variable as a fallback (for canvas environment)
             if (typeof __firebase_config !== 'undefined') {
-                // Use config from the environment if available
                 const envConfig = JSON.parse(__firebase_config);
-                initializeApp(envConfig);
+                app = initializeApp(envConfig);
             } else {
-                // If no config is available, stop and warn
-                dom.loaderContainer.innerHTML = '<p class="text-red-500">Firebase is not configured. Please add your Firebase project keys to the `config.js` file.</p>';
-                console.error("Firebase config is missing.");
+                // If no config is found anywhere
+                dom.loaderContainer.innerHTML = '<p class="text-red-500">Firebase config is missing. Please create `config.js` and add your Firebase project keys.</p>';
+                console.error("firebaseConfig is not defined. Check config.js.");
                 return;
             }
         } else {
-             // Use the hardcoded config if user has filled it in
-             initializeApp(firebaseConfig);
+             // Use the global config from config.js
+             app = initializeApp(firebaseConfig);
         }
 
-        db = getFirestore();
-        auth = getAuth();
+        // Initialize services
+        db = getFirestore(app);
+        auth = getAuth(app);
         
+        // Set up the authentication listener
         onAuthStateChanged(auth, async (user) => {
             if (user) {
-                if (!userId) {
+                // User is signed in
+                if (!userId) { // Only run this once
                     userId = user.uid;
-                    await setupAllListeners();
+                    await setupAllListeners(); // This will attach all the database listeners
                     dom.loaderContainer.style.display = 'none';
                     dom.appContent.classList.remove('invisible');
                 }
             } else {
+                // User is signed out. Attempt to sign them in.
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    // We are in the preview environment
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
+                    // We are on the live deployed site
                     await signInAnonymously(auth);
                 }
             }
         });
+
     } catch (error) {
         console.error("Firebase Init Error:", error);
-        dom.loaderContainer.innerHTML = '<p class="text-red-500">Could not connect to database. Check Firebase config and rules.</p>';
+        dom.loaderContainer.innerHTML = `<p class="text-red-500">Could not connect to database. Check: <br>1. Firebase config is correct. <br>2. Anonymous Auth is enabled. <br>3. Firestore Rules are set. <br>4. Authorized Domain is added.</p>`;
     }
 }
-
-// --- GLOBAL EVENT LISTENERS & INITIAL SETUP ---
 
 async function setupAllListeners() {
     if (!userId) return;
     const collectionPath = (name) => `/artifacts/${appId}/users/${userId}/${name}`;
     
+    // --- Database Snapshots ---
     onSnapshot(query(collection(db, collectionPath('meals')), orderBy("date", "desc")), (snap) => {
         foodLog = snap.docs.map(d => ({ id: d.id, ...d.data(), date: d.data().date.toDate() }));
         renderAllMeals(foodLog);
@@ -245,8 +221,9 @@ async function setupAllListeners() {
         }
         if(data.monitoringPrefs) {
             Object.keys(metricLabels).forEach(key => {
-                if (typeof userProfile.monitoringPrefs[key] === 'undefined') userProfile.monitoringPrefs[key] = true;
+                if (typeof data.monitoringPrefs[key] === 'undefined') data.monitoringPrefs[key] = true;
             });
+            userProfile.monitoringPrefs = data.monitoringPrefs;
         }
         healthGoals.calories = userProfile.calorieGoal || 2200;
         renderSettings();
@@ -254,9 +231,10 @@ async function setupAllListeners() {
         updateGreeting();
         updateCalorieTracker();
     });
+    
     showHealthTip();
     
-    // --- All other event listeners ---
+    // --- Event Listeners ---
     dom.tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             dom.tabs.forEach(t => {
@@ -447,13 +425,13 @@ async function setupAllListeners() {
     });
 
     document.addEventListener('click', (e) => {
-        if (dom.manualLog.input && !dom.manualLog.input.contains(e.target) && dom.manualLog.autocompleteList && !dom.manualLog.autocompleteList.contains(e.target)) {
+        if (!dom.manualLog.input.contains(e.target) && !dom.manualLog.autocompleteList.contains(e.target)) {
             dom.manualLog.autocompleteList.classList.add('hidden');
         }
     });
 
-    if (window.SpeechRecognition || window.webkitSpeechRecognition) {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    // **FIX:** Moved speech recognition setup inside the `if` block
+    if (SpeechRecognition) {
         recognition = new SpeechRecognition();
         recognition.continuous = false;
         recognition.lang = 'en-US';
@@ -495,7 +473,7 @@ async function setupAllListeners() {
         dom.manualLog.micText.textContent = 'N/A';
     }
     
-    // New Pantry Scanner Listeners
+    // --- Pantry Scanner Listeners ---
     dom.pantryLog.input.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -537,14 +515,32 @@ async function setupAllListeners() {
     dom.pantryScanResults.closeBtn.addEventListener('click', () => dom.pantryScanResults.modal.classList.add('hidden'));
 }
 
-// --- AI & IMAGE ANALYSIS ---
-
+// --- GEMINI API FUNCTIONS ---
 async function getFoodFromImage(base64ImageData, mimeType) {
-    const apiKey = ""; 
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+    // **FIX:** Use the geminiApiKey variable from config.js
+    // Fallback to environment key if not provided (for preview)
+    let apiKey = (typeof geminiApiKey !== 'undefined' && geminiApiKey !== "YOUR_GEMINI_API_KEY") 
+                 ? geminiApiKey 
+                 : (typeof __google_api_key !== 'undefined' ? __google_api_key : "");
+    
+    if (!apiKey || apiKey === "YOUR_GEMINI_API_KEY") {
+         // Try to get the key from the Firebase config as a last resort IF gemini key is not set
+        apiKey = (typeof firebaseConfig !== 'undefined' && firebaseConfig.apiKey !== "YOUR_API_KEY") ? firebaseConfig.apiKey : "";
+    }
+
+    if (!apiKey || apiKey === "YOUR_GEMINI_API_KEY" || apiKey === "YOUR_API_KEY") {
+        throw new Error("API key is missing. Please add your Gemini API key to the `geminiApiKey` variable in config.js.");
+    }
+
+    // **FIX:** Using the correct model for this task
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=${apiKey}`;
     const payload = { contents: [{ parts: [{ text: "You are a nutritional analyst. Your task is to identify all food items in this image. List them as a simple comma-separated string, e.g., 'sirloin steak, mashed potatoes, spinach, roti, dal'." }, { inlineData: { mimeType, data: base64ImageData } }] }] };
+    
     const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (!response.ok) throw new Error(`API error ${response.status}`);
+    if (!response.ok) {
+        console.error('API Response Error:', await response.text());
+        throw new Error(`API error ${response.status}`);
+    }
     const result = await response.json();
     const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) throw new Error("Could not extract text from response.");
@@ -552,8 +548,23 @@ async function getFoodFromImage(base64ImageData, mimeType) {
 }
 
 async function analyzeNutritionLabel(base64ImageData, mimeType) {
-    const apiKey = "";
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+    // **FIX:** Use the geminiApiKey variable from config.js
+    // Fallback to environment key if not provided (for preview)
+    let apiKey = (typeof geminiApiKey !== 'undefined' && geminiApiKey !== "YOUR_GEMINI_API_KEY") 
+                 ? geminiApiKey 
+                 : (typeof __google_api_key !== 'undefined' ? __google_api_key : "");
+    
+    if (!apiKey && typeof firebaseConfig !== 'undefined' && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+         // Try to get the key from the Firebase config as a last resort IF gemini key is not set
+        apiKey = firebaseConfig.apiKey;
+    }
+
+    if (!apiKey || apiKey === "YOUR_GEMINI_API_KEY" || apiKey === "YOUR_API_KEY") {
+        throw new Error("API key is missing. Please add your Gemini API key to the `geminiApiKey` variable in config.js.");
+    }
+
+    // **FIX:** Using the correct model for this task
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=${apiKey}`;
     const payload = {
         contents: [{
             parts: [
@@ -563,15 +574,18 @@ async function analyzeNutritionLabel(base64ImageData, mimeType) {
         }]
     };
     const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (!response.ok) throw new Error(`API error ${response.status}`);
+    if (!response.ok) {
+        console.error('API Response Error:', await response.text());
+        throw new Error(`API error ${response.status}`);
+    }
     const result = await response.json();
     const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) throw new Error("Could not extract text from response.");
     return text;
 }
 
-// --- MODAL & UI FUNCTIONS ---
 
+// --- MODAL & UI FUNCTIONS ---
 function showPantryScanResults(analysisText) {
     // Simple text formatting for the modal
     const formattedText = analysisText
@@ -592,6 +606,139 @@ function showHighRiskAlert(content) {
     dom.highRiskAlert.modal.classList.remove('hidden');
 }
 
+function openModal(content) { 
+    dom.summaries.content.innerHTML = content; 
+    dom.summaries.modal.classList.add('flex'); 
+    dom.summaries.modal.classList.remove('hidden');
+}
+function closeModal() { 
+    dom.summaries.modal.classList.remove('flex'); 
+    dom.summaries.modal.classList.add('hidden');
+}
+
+function openSymptomModal(symptom = null) {
+    currentEditInfo = { id: symptom ? symptom.id : null, type: 'symptom' };
+    dom.symptom.title.textContent = symptom ? 'Edit Symptom' : 'Log a Symptom';
+    dom.symptom.saveBtn.textContent = symptom ? 'Save Changes' : 'Save Symptom';
+    dom.symptom.description.value = symptom ? symptom.description : '';
+    dom.symptom.severity.value = symptom ? symptom.severity : 5;
+    dom.symptom.severityValue.textContent = symptom ? symptom.severity : 5;
+    dom.symptom.modal.classList.add('flex'); 
+    dom.symptom.modal.classList.remove('hidden');
+}
+const closeSymptomModal = () => { dom.symptom.modal.classList.remove('flex'); dom.symptom.modal.classList.add('hidden'); currentEditInfo = { id: null, type: null }; };
+
+function openActivityEditModal(activity) {
+    currentEditInfo = { id: activity.id, type: 'activity' };
+    dom.activityEdit.description.value = activity.description;
+    dom.activityEdit.modal.classList.add('flex'); 
+    dom.activityEdit.modal.classList.remove('hidden');
+}
+const closeActivityEditModal = () => { dom.activityEdit.modal.classList.remove('flex'); dom.activityEdit.modal.classList.add('hidden'); currentEditInfo = { id: null, type: null }; };
+
+// --- Settings Modal ---
+const openSettingsModal = () => { dom.settings.modal.classList.add('flex'); dom.settings.modal.classList.remove('hidden'); };
+const closeSettingsModal = () => { dom.settings.modal.classList.remove('flex'); dom.settings.modal.classList.add('hidden'); };
+
+function updateBmiAndCaloriesDisplay() {
+    const ft = parseFloat(dom.settings.heightFt.value) || 0;
+    const inches = parseFloat(dom.settings.heightIn.value) || 0;
+    const weight = parseFloat(dom.settings.weightLbs.value) || 0;
+    const totalInches = (ft * 12) + inches;
+
+    if (weight > 0 && totalInches > 0) {
+        const bmi = (weight / (totalInches * totalInches)) * 703;
+        dom.settings.bmiValue.textContent = bmi.toFixed(1);
+
+        const weightKg = weight / 2.20462;
+        const heightCm = totalInches * 2.54;
+        const age = 56; // Example age, you could add this to profile
+        const bmr = 66.5 + (13.75 * weightKg) + (5.003 * heightCm) - (6.75 * age);
+        const recommended = Math.round(bmr * 1.375); // Assume lightly active
+        dom.settings.recommendedCalories.textContent = `${recommended}`;
+    } else {
+        dom.settings.bmiValue.textContent = '--.-';
+        dom.settings.recommendedCalories.textContent = '----';
+    }
+}
+
+function saveBodyMetrics() {
+    const data = {
+        heightFt: parseFloat(dom.settings.heightFt.value) || null,
+        heightIn: parseFloat(dom.settings.heightIn.value) || null,
+        weightLbs: parseFloat(dom.settings.weightLbs.value) || null,
+        calorieGoal: parseInt(dom.settings.calorieGoal.value) || 2200,
+        name: dom.settings.nameInput.value || '',
+    };
+    saveProfileData(data);
+}
+
+function renderSettings() {
+    dom.settings.nameInput.value = userProfile.name || '';
+    dom.settings.heightFt.value = userProfile.heightFt || '';
+    dom.settings.heightIn.value = userProfile.heightIn || '';
+    dom.settings.weightLbs.value = userProfile.weightLbs || '';
+    dom.settings.calorieGoal.value = userProfile.calorieGoal || 2200;
+    
+    dom.settings.options.innerHTML = Object.keys(metricLabels).map(key => `
+        <label for="toggle-${key}" class="flex items-center justify-between bg-white p-3 rounded-lg shadow-sm border border-slate-200">
+            <span class="font-semibold text-slate-700 text-sm">${metricLabels[key]}</span>
+            <div class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="toggle-${key}" class="sr-only toggle-checkbox" data-key="${key}" ${userProfile.monitoringPrefs[key] ? 'checked' : ''}>
+                <div class="w-11 h-6 bg-slate-200 rounded-full toggle-label transition-colors ease-in-out duration-200 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform after:duration-200"></div>
+            </div>
+        </label>
+    `).join('');
+    
+    dom.settings.options.querySelectorAll('.toggle-checkbox').forEach(toggle => {
+        toggle.addEventListener('change', async (e) => {
+            const key = e.target.dataset.key;
+            userProfile.monitoringPrefs[key] = e.target.checked;
+            await saveProfileData({ monitoringPrefs: userProfile.monitoringPrefs });
+        });
+    });
+    updateBmiAndCaloriesDisplay();
+    updateGreeting();
+    updateCalorieTracker();
+}
+
+// --- UI Updates ---
+function updateGreeting() {
+    if(userProfile.name) {
+        dom.greeting.textContent = `Hi, ${userProfile.name}!`;
+    } else {
+        dom.greeting.textContent = 'My Daily Journal';
+    }
+}
+
+function updateCalorieTracker() {
+    const goal = userProfile.calorieGoal || 2200;
+    const startOfToday = new Date(); startOfToday.setHours(0,0,0,0);
+    const todaysMeals = foodLog.filter(meal => meal.date >= startOfToday);
+    const eaten = todaysMeals.reduce((sum, meal) => sum + (meal.totals.cal || 0), 0);
+    const left = goal - eaten;
+
+    dom.calorieTracker.goal.textContent = goal;
+    dom.calorieTracker.eaten.textContent = eaten.toFixed(0);
+    dom.calorieTracker.left.textContent = left.toFixed(0);
+
+    dom.calorieTracker.eaten.classList.toggle('text-red-600', eaten > goal);
+    dom.calorieTracker.eaten.classList.toggle('text-green-600', eaten <= goal);
+}
+
+function showHealthTip() {
+    const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+    const tip = healthTips[dayOfYear % healthTips.length];
+    dom.motivation.innerHTML = `
+        <div class="flex items-center justify-center gap-2 mb-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-500"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            <h3 class="font-bold text-lg text-slate-800">Health Tip of the Day</h3>
+        </div>
+        <p class="text-slate-600 text-sm">"${tip}"</p>
+    `;
+}
+
+// --- DATABASE FUNCTIONS ---
 function addData(collectionName, data) {
     return addDoc(collection(db, `/artifacts/${appId}/users/${userId}/${collectionName}`), data);
 }
@@ -604,6 +751,7 @@ function saveProfileData(data) {
     return setDoc(doc(db, `/artifacts/${appId}/users/${userId}/profile/userProfile`), data, { merge: true });
 }
 
+// --- LOGIC FUNCTIONS ---
 const handleLogEntry = async () => {
     const text = dom.manualLog.input.value.trim();
     if (!text) return;
@@ -749,6 +897,7 @@ function getSignals(estimates) {
     return s;
 }
 
+// --- RENDER FUNCTIONS ---
 function renderAllMeals(meals) {
     dom.logPanels.meal.innerHTML = '';
     if (meals.length === 0) {
@@ -824,12 +973,21 @@ function createMealCard(meal) {
     return card;
 }
 
-const renderAllActivities = (activities) => dom.logPanels.activity.innerHTML = activities.map(act => `<div class="bg-white p-4 rounded-xl shadow-md flex justify-between items-center"><div class="flex-1"><p class="font-semibold text-slate-800">${act.description}</p><p class="text-xs text-slate-500 mt-1">${act.date.toLocaleString()}</p></div><button class="edit-activity-btn text-xs font-semibold text-blue-600 hover:underline ml-4" data-id="${act.id}">Edit</button></div>`).join('');
-const renderAllSymptoms = (symptoms) => dom.logPanels.symptom.innerHTML = symptoms.map(sym => `<div class="bg-purple-50 border-l-4 border-purple-400 p-4 rounded-r-lg shadow-md"><div class="flex justify-between items-start"><div class="flex-1"><p class="font-semibold text-purple-800">${sym.description}</p><p class="text-xs text-purple-600 mt-1">${sym.date.toLocaleString()}</p></div><p class="font-bold text-purple-800 text-lg ml-4">${sym.severity}/10</p></div><div class="mt-3 pt-3 border-t border-purple-200 flex items-center justify-between"><button class="correlate-btn text-sm font-semibold text-blue-600 hover:underline" data-symptom-date="${sym.date.toISOString()}">See Food Log (4 Days)</button><button class="edit-symptom-btn text-xs font-semibold text-blue-600 hover:underline" data-id="${sym.id}">Edit</button></div></div>`).join('');
-
-const openModal = (content) => { dom.summaries.content.innerHTML = content; dom.summaries.modal.classList.add('flex'); dom.summaries.modal.classList.remove('hidden');};
-const closeModal = () => { dom.summaries.modal.classList.remove('flex'); dom.summaries.modal.classList.add('hidden');};
-
+const renderAllActivities = (activities) => {
+    if (activities.length === 0) {
+        dom.logPanels.activity.innerHTML = '<p class="text-center text-slate-500">No activities logged yet.</p>';
+        return;
+    }
+    dom.logPanels.activity.innerHTML = activities.map(act => `<div class="bg-white p-4 rounded-xl shadow-md flex justify-between items-center"><div class="flex-1"><p class="font-semibold text-slate-800">${act.description}</p><p class="text-xs text-slate-500 mt-1">${act.date.toLocaleString()}</p></div><button class="edit-activity-btn text-xs font-semibold text-blue-600 hover:underline ml-4" data-id="${act.id}">Edit</button></div>`).join('');
+}
+const renderAllSymptoms = (symptoms) => {
+    if (symptoms.length === 0) {
+        dom.logPanels.symptom.innerHTML = '<p class="text-center text-slate-500">No symptoms logged yet.</p>';
+        return;
+    }
+    dom.logPanels.symptom.innerHTML = symptoms.map(sym => `<div class="bg-purple-50 border-l-4 border-purple-400 p-4 rounded-r-lg shadow-md"><div class="flex justify-between items-start"><div class="flex-1"><p class="font-semibold text-purple-800">${sym.description}</p><p class="text-xs text-purple-600 mt-1">${sym.date.toLocaleString()}</p></div><p class="font-bold text-purple-800 text-lg ml-4">${sym.severity}/10</p></div><div class="mt-3 pt-3 border-t border-purple-200 flex items-center justify-between"><button class="correlate-btn text-sm font-semibold text-blue-600 hover:underline" data-symptom-date="${sym.date.toISOString()}">See Food Log (4 Days)</button><button class="edit-symptom-btn text-xs font-semibold text-blue-600 hover:underline" data-id="${sym.id}">Edit</button></div></div>`).join('');
+}
+        
 function showDailySummary() {
     const startOfToday = new Date(); startOfToday.setHours(0,0,0,0);
     const todaysMeals = foodLog.filter(meal => meal.date >= startOfToday);
@@ -892,166 +1050,53 @@ function showSymptomCorrelation(symptomDateStr) {
     openModal(`<h2 class="text-2xl font-bold mb-4">Food Correlation Report</h2><div class="bg-white p-4 rounded-xl shadow-md mb-4"><h3 class="font-bold text-lg mb-2">Potential Gout Triggers</h3><p class="text-sm">In the 4 days before your symptom, you consumed:</p><div class="grid grid-cols-3 gap-2 text-center mt-2"><div><p class="font-bold text-2xl text-red-500">${triggerSummary.highPurine}</p><p class="text-xs">High-Purine</p></div><div><p class="font-bold text-2xl text-amber-500">${triggerSummary.moderatePurine}</p><p class="text-xs">Mod-Purine</p></div><div><p class="font-bold text-2xl text-red-500">${triggerSummary.alcohol}</p><p class="text-xs">Alcohol</p></div></div></div><div><h3 class="font-bold text-lg mb-2">Meal History</h3><div class="max-h-64 overflow-y-auto">${mealListHTML}</div></div>`);
 }
 
-const openSymptomModal = (symptom = null) => {
-    currentEditInfo = { id: symptom ? symptom.id : null, type: 'symptom' };
-    dom.symptom.title.textContent = symptom ? 'Edit Symptom' : 'Log a Symptom';
-    dom.symptom.saveBtn.textContent = symptom ? 'Save Changes' : 'Save Symptom';
-    dom.symptom.description.value = symptom ? symptom.description : '';
-    dom.symptom.severity.value = symptom ? symptom.severity : 5;
-    dom.symptom.severityValue.textContent = symptom ? symptom.severity : 5;
-    dom.symptom.modal.classList.add('flex'); dom.symptom.modal.classList.remove('hidden');
-};
-const closeSymptomModal = () => { dom.symptom.modal.classList.remove('flex'); dom.symptom.modal.classList.add('hidden'); currentEditInfo = { id: null, type: null }; };
-
-const openActivityEditModal = (activity) => {
-    currentEditInfo = { id: activity.id, type: 'activity' };
-    dom.activityEdit.description.value = activity.description;
-    dom.activityEdit.modal.classList.add('flex'); dom.activityEdit.modal.classList.remove('hidden');
-};
-const closeActivityEditModal = () => { dom.activityEdit.modal.classList.remove('flex'); dom.activityEdit.modal.classList.add('hidden'); currentEditInfo = { id: null, type: null }; };
-
-// --- Settings Modal ---
-const openSettingsModal = () => { dom.settings.modal.classList.add('flex'); dom.settings.modal.classList.remove('hidden'); };
-const closeSettingsModal = () => { dom.settings.modal.classList.remove('flex'); dom.settings.modal.classList.add('hidden'); };
-
-const updateBmiAndCaloriesDisplay = () => {
-    const ft = parseFloat(dom.settings.heightFt.value) || 0;
-    const inches = parseFloat(dom.settings.heightIn.value) || 0;
-    const weight = parseFloat(dom.settings.weightLbs.value) || 0;
-    const totalInches = (ft * 12) + inches;
-
-    if (weight > 0 && totalInches > 0) {
-        const bmi = (weight / (totalInches * totalInches)) * 703;
-        dom.settings.bmiValue.textContent = bmi.toFixed(1);
-
-        const weightKg = weight / 2.20462;
-        const heightCm = totalInches * 2.54;
-        const age = 56; // You can make this part of the profile
-        const bmr = 66.5 + (13.75 * weightKg) + (5.003 * heightCm) - (6.75 * age);
-        const recommended = Math.round(bmr * 1.375); // Assume lightly active
-        dom.settings.recommendedCalories.textContent = `${recommended}`;
-    } else {
-        dom.settings.bmiValue.textContent = '--.-';
-        dom.settings.recommendedCalories.textContent = '----';
-    }
-};
-
-const saveBodyMetrics = () => {
-    const data = {
-        heightFt: parseFloat(dom.settings.heightFt.value) || null,
-        heightIn: parseFloat(dom.settings.heightIn.value) || null,
-        weightLbs: parseFloat(dom.settings.weightLbs.value) || null,
-        calorieGoal: parseInt(dom.settings.calorieGoal.value) || 2200,
-        name: dom.settings.nameInput.value || '',
+// --- INIT ---
+// We wrap the initial setup in a DOMContentLoaded listener to ensure all HTML elements are loaded before the script tries to find them.
+document.addEventListener('DOMContentLoaded', () => {
+    // **FIX:** DOM elements are now bound *after* the document is loaded
+    dom = {
+        loaderContainer: document.getElementById('loader-container'),
+        appContent: document.getElementById('app-content'),
+        greeting: document.getElementById('greeting'),
+        calorieTracker: {
+            goal: document.getElementById('calorie-goal-display'),
+            eaten: document.getElementById('calorie-eaten-display'),
+            left: document.getElementById('calorie-left-display'),
+        },
+        profilePic: { img: document.getElementById('profile-pic-img'), placeholder: document.getElementById('profile-pic-placeholder'), input: document.getElementById('profile-pic-input') },
+        tabs: document.querySelectorAll('.tab-btn'),
+        panels: document.querySelectorAll('.tab-panel'),
+        manualLog: { input: document.getElementById('food-input'), autocompleteList: document.getElementById('autocomplete-list'), button: document.getElementById('log-button'), micButton: document.getElementById('mic-button'), micText: document.getElementById('mic-text'), micIcon: document.getElementById('mic-icon'), confirmationPanel: document.getElementById('meal-confirmation-panel'), confirmationItemsContainer: document.getElementById('confirmation-items-container'), confirmLogButton: document.getElementById('confirm-log-button'), cancelLogButton: document.getElementById('cancel-log-button'), title: document.getElementById('meal-panel-title'), mealTypeSelector: document.getElementById('meal-type-selector') },
+        photoLog: { uploader: document.getElementById('photo-uploader'), loader: document.getElementById('photo-loader-container'), input: document.getElementById('photo-input'), fileName: document.getElementById('file-name'), button: document.getElementById('analyze-photo-button') },
+        pantryLog: { uploader: document.getElementById('pantry-uploader'), loader: document.getElementById('pantry-loader-container'), input: document.getElementById('pantry-photo-input'), fileName: document.getElementById('pantry-file-name'), button: document.getElementById('analyze-pantry-button') },
+        activityLog: { input: document.getElementById('activity-input'), button: document.getElementById('log-activity-button'), container: document.getElementById('activity-log-container') },
+        summaries: { dailyBtn: document.getElementById('daily-summary-button'), weeklyBtn: document.getElementById('weekly-summary-button'), modal: document.getElementById('summary-modal'), content: document.getElementById('summary-content'), closeBtn: document.getElementById('close-modal') },
+        symptom: { logBtn: document.getElementById('log-symptom-button'), modal: document.getElementById('symptom-modal'), title: document.getElementById('symptom-modal-title'), description: document.getElementById('symptom-description'), severity: document.getElementById('symptom-severity'), severityValue: document.getElementById('severity-value'), saveBtn: document.getElementById('save-symptom-button'), cancelBtn: document.getElementById('cancel-symptom-button'), container: document.getElementById('symptom-log-container') },
+        activityEdit: { modal: document.getElementById('activity-edit-modal'), description: document.getElementById('activity-edit-description'), saveBtn: document.getElementById('save-activity-edit-button'), cancelBtn: document.getElementById('cancel-activity-edit-button')},
+        logTabs: document.querySelectorAll('.log-tab-btn'),
+        logPanels: { meal: document.getElementById('log-container'), activity: document.getElementById('activity-log-container'), symptom: document.getElementById('symptom-log-container') },
+        settings: { 
+            button: document.getElementById('settings-button'), 
+            modal: document.getElementById('settings-modal'), 
+            options: document.getElementById('settings-options'), 
+            closeButton: document.getElementById('close-settings-button'),
+            nameInput: document.getElementById('name-input'),
+            heightFt: document.getElementById('height-ft'),
+            heightIn: document.getElementById('height-in'),
+            weightLbs: document.getElementById('weight-lbs'),
+            bmiValue: document.getElementById('bmi-value'),
+            calorieGoal: document.getElementById('calorie-goal'),
+            recommendedCalories: document.getElementById('recommended-calories'),
+            profileTab: document.getElementById('settings-tab-profile'),
+            monitoringTab: document.getElementById('settings-tab-monitoring'),
+            profilePanel: document.getElementById('settings-panel-profile'),
+            monitoringPanel: document.getElementById('settings-panel-monitoring'),
+        },
+        motivation: document.getElementById('daily-motivation'),
+        highRiskAlert: { modal: document.getElementById('high-risk-alert-modal'), content: document.getElementById('high-risk-alert-content'), closeBtn: document.getElementById('close-high-risk-alert') },
+        pantryScanResults: { modal: document.getElementById('pantry-scan-results-modal'), content: document.getElementById('pantry-scan-results-content'), closeBtn: document.getElementById('close-pantry-scan-results') },
     };
-    saveProfileData(data);
-};
-
-function renderSettings() {
-    dom.settings.nameInput.value = userProfile.name || '';
-    dom.settings.heightFt.value = userProfile.heightFt || '';
-    dom.settings.heightIn.value = userProfile.heightIn || '';
-    dom.settings.weightLbs.value = userProfile.weightLbs || '';
-    dom.settings.calorieGoal.value = userProfile.calorieGoal || 2200;
     
-    dom.settings.options.innerHTML = Object.keys(metricLabels).map(key => `
-        <label for="toggle-${key}" class="flex items-center justify-between bg-white p-3 rounded-lg shadow-sm border border-slate-200">
-            <span class="font-semibold text-slate-700 text-sm">${metricLabels[key]}</span>
-            <div class="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" id="toggle-${key}" class="sr-only toggle-checkbox" data-key="${key}" ${userProfile.monitoringPrefs[key] ? 'checked' : ''}>
-                <div class="w-11 h-6 bg-slate-200 rounded-full toggle-label transition-colors ease-in-out duration-200 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-transform after:duration-200"></div>
-            </div>
-        </label>
-    `).join('');
-    
-    dom.settings.options.querySelectorAll('.toggle-checkbox').forEach(toggle => {
-        toggle.addEventListener('change', async (e) => {
-            const key = e.target.dataset.key;
-            userProfile.monitoringPrefs[key] = e.target.checked;
-            await saveProfileData({ monitoringPrefs: userProfile.monitoringPrefs });
-        });
-    });
-    updateBmiAndCaloriesDisplay();
-    updateGreeting();
-    updateCalorieTracker();
-}
-
-// --- UI Updates ---
-function updateGreeting() {
-    if(userProfile.name) {
-        dom.greeting.textContent = `Hi, ${userProfile.name}!`;
-    } else {
-        dom.greeting.textContent = 'My Daily Journal';
-    }
-}
-
-function updateCalorieTracker() {
-    const goal = userProfile.calorieGoal || 2200;
-    const startOfToday = new Date(); startOfToday.setHours(0,0,0,0);
-    const todaysMeals = foodLog.filter(meal => meal.date >= startOfToday);
-    const eaten = todaysMeals.reduce((sum, meal) => sum + (meal.totals.cal || 0), 0);
-    const left = goal - eaten;
-
-    dom.calorieTracker.goal.textContent = goal;
-    dom.calorieTracker.eaten.textContent = eaten.toFixed(0);
-    dom.calorieTracker.left.textContent = left.toFixed(0);
-
-    dom.calorieTracker.eaten.classList.toggle('text-red-600', eaten > goal);
-    dom.calorieTracker.eaten.classList.toggle('text-green-600', eaten <= goal);
-}
-
-function showHealthTip() {
-    const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
-    const tip = healthTips[dayOfYear % healthTips.length];
-    dom.motivation.innerHTML = `
-        <div class="flex items-center justify-center gap-2 mb-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-500"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-            <h3 class="font-bold text-lg text-slate-800">Health Tip of the Day</h3>
-        </div>
-        <p class="text-slate-600 text-sm">"${tip}"</p>
-    `;
-}
-
-function showHighRiskAlert(content) {
-    dom.highRiskAlert.content.innerHTML = content;
-    dom.highRiskAlert.modal.classList.add('flex');
-    dom.highRiskAlert.modal.classList.remove('hidden');
-}
-
-// --- Pantry Scanner ---
-async function analyzeNutritionLabel(base64ImageData, mimeType) {
-    const apiKey = "";
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-    const payload = {
-        contents: [{
-            parts: [
-                { text: "You are a nutritional analyst. Transcribe the nutrition label in this image. Focus only on Calories, Sodium, Saturated Fat, and Total Sugars. Provide the value and percent daily value (%) for each. If a value is not present, mark it as N/A. Then, provide a brief one-sentence health summary about this product for someone monitoring blood pressure, cholesterol, and gout." },
-                { inlineData: { mimeType, data: base64ImageData } }
-            ]
-        }]
-    };
-    const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (!response.ok) throw new Error(`API error ${response.status}`);
-    const result = await response.json();
-    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error("Could not extract text from response.");
-    return text;
-}
-
-function showPantryScanResults(analysisText) {
-    // Simple text formatting for the modal
-    const formattedText = analysisText
-        .replace(/Calories:? ([\d,]+)/g, '<p><strong>Calories:</strong> <span class="font-bold text-blue-600">$1</span></p>')
-        .replace(/Sodium:? ([\d,]+mg(?: ?\([\d,]+%\))?)/g, '<p><strong>Sodium:</strong> <span class="font-bold text-red-600">$1</span></p>')
-        .replace(/Saturated Fat:? ([\d,]+g(?: ?\([\d,]+%\))?)/g, '<p><strong>Saturated Fat:</strong> <span class="font-bold text-red-600">$1</span></p>')
-        .replace(/Total Sugars:? ([\d,]+g)/g, '<p><strong>Total Sugars:</strong> <span class="font-bold text-amber-600">$1</span></p>')
-        .replace(/Health Summary:?/g, '<p class="mt-4 pt-4 border-t border-slate-200 font-semibold">Health Summary:</p>');
-
-    dom.pantryScanResults.content.innerHTML = `<div class="space-y-2 text-slate-700">${formattedText}</div>`;
-    dom.pantryScanResults.modal.classList.add('flex');
-    dom.pantryScanResults.modal.classList.remove('hidden');
-}
-
-// --- Init ---
-setupFirebase();
+    setupFirebase();
+});
 
