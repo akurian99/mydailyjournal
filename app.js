@@ -39,7 +39,7 @@ const foodDatabase = {
     'sirloin steak': { keywords: ['sirloin steak', 'steak'], unit: 'oz', cal: 55, na: 70, sat_fat: 2.5, fat: 3, protein: 7, potassium: 100, added_sugar: 0, fiber: 0, purine: 'Moderate', swap: 'Try a smaller 5-6 oz portion, or swap for grilled salmon for healthy fats.' },
     'anchovies': { keywords: ['anchovies'], unit: 'oz', cal: 60, na: 1040, sat_fat: 1, fat: 2.5, protein: 6, potassium: 110, added_sugar: 0, fiber: 0, purine: 'High', swap: 'Avoid high-purine fish. Try capers for a similar salty kick in dishes.' },
     'deli turkey': { keywords: ['deli turkey', 'turkey slices'], unit: 'oz', cal: 35, na: 350, sat_fat: 0.2, fat: 1, protein: 5, potassium: 70, added_sugar: 0, fiber: 0, purine: 'Moderate', swap: 'Choose low-sodium versions or, even better, use leftover roasted chicken/turkey.' },
-    'mashed potatoes': { keywords: ['mashed potatoes'], unit: 'cup', cal: 200, na: 350, sat_fat: 8, fat: 9, protein: 4, potassium: 300, added_sugar: 0, fiber: 3, purine: 'Low', swap: 'Mash with olive oil or Greek yogurt instead of butter to cut saturated fat.' },
+    'mashed potatoes': { keywords: ['mashed potatoes', 'mashed potato'], unit: 'cup', cal: 200, na: 350, sat_fat: 8, fat: 9, protein: 4, potassium: 300, added_sugar: 0, fiber: 3, purine: 'Low', swap: 'Mash with olive oil or Greek yogurt instead of butter to cut saturated fat.' },
     'sautéed spinach': { keywords: ['sautéed spinach', 'spinach'], unit: 'cup', cal: 50, na: 150, sat_fat: 0.5, fat: 1, protein: 5, potassium: 840, added_sugar: 0, fiber: 4, purine: 'Low', swap: 'Great choice! Steam it to avoid added oils and sodium.' },
     'chicken noodle soup': { keywords: ['chicken noodle soup', 'chicken soup'], unit: 'cup', cal: 80, na: 850, sat_fat: 1, fat: 2.5, protein: 5, potassium: 150, added_sugar: 1, fiber: 1, purine: 'Low', swap: 'Opt for a low-sodium broth or a homemade version to control salt.' },
     'side salad': { keywords: ['side salad', 'salad'], unit: 'cup', cal: 100, na: 250, sat_fat: 2, fat: 8, protein: 2, potassium: 200, added_sugar: 2, fiber: 2, purine: 'Low', swap: 'Use an olive oil & vinegar dressing instead of creamy ones.' },
@@ -75,7 +75,8 @@ const foodDatabase = {
     'brown rice': { keywords: ['brown rice'], unit: 'cup', cal: 215, na: 10, sat_fat: 0.4, fat: 1.8, protein: 5, potassium: 150, added_sugar: 0, fiber: 3.5, purine: 'Low', swap: 'Excellent choice for fiber.' },
     'pasta': { keywords: ['pasta'], unit: 'cup', cal: 220, na: 1, sat_fat: 0.2, fat: 1.3, protein: 8, potassium: 120, added_sugar: 0, fiber: 2.5, purine: 'Low', swap: 'Opt for whole wheat pasta for more fiber and pair with a veggie-based sauce.' },
     'spaghetti and meatballs': { keywords: ['spaghetti and meatballs', 'spaghetti meatballs'], unit: 'cup', cal: 380, na: 900, sat_fat: 7, fat: 16, protein: 20, potassium: 550, added_sugar: 8, fiber: 4, purine: 'Moderate', swap: 'Use whole wheat pasta and lean meatballs.' },
-    'chicken alfredo': { keywords: ['chicken alfredo', 'chicken fettuccine', 'chicken pasta'], unit: 'cup', cal: 600, na: 950, sat_fat: 22, fat: 38, protein: 28, potassium: 350, added_sugar: 2, fiber: 2, purine: 'Moderate', swap: 'A very high-fat dish. Try grilled chicken with a tomato-based sauce instead.' },
+    // **FIX:** Removed "chicken pasta" to prevent it from matching *before* "chicken" and "pasta" separately.
+    'chicken alfredo': { keywords: ['chicken alfredo', 'chicken fettuccine'], unit: 'cup', cal: 600, na: 950, sat_fat: 22, fat: 38, protein: 28, potassium: 350, added_sugar: 2, fiber: 2, purine: 'Moderate', swap: 'A very high-fat dish. Try grilled chicken with a tomato-based sauce instead.' },
     'macaroni and cheese': { keywords: ['macaroni and cheese', 'mac and cheese'], unit: 'cup', cal: 350, na: 750, sat_fat: 10, fat: 18, protein: 12, potassium: 150, added_sugar: 3, fiber: 2, purine: 'Low', swap: 'Use whole wheat pasta and low-fat cheese to reduce fat and sodium.' },
     'quinoa': { keywords: ['quinoa'], unit: 'cup', cal: 222, na: 13, sat_fat: 0.5, fat: 3.6, protein: 8, potassium: 318, added_sugar: 0, fiber: 5, purine: 'Low', swap: 'A fantastic complete protein and high-fiber grain.' },
     'broccoli': { keywords: ['broccoli'], unit: 'cup', cal: 55, na: 50, sat_fat: 0.1, fat: 0.6, protein: 4, potassium: 450, added_sugar: 0, fiber: 5, purine: 'Low', swap: 'Great choice! Steaming is a great way to preserve nutrients.' },
@@ -298,6 +299,10 @@ async function setupAllListeners() {
         dom.photoLog.loader.classList.remove('hidden');
         try {
             const foodText = await getFoodFromImage(currentPhotoBase64, mimeType);
+            
+            // **DEBUGGING LOG**
+            console.log("Gemini API Response:", foodText); 
+            
             dom.manualLog.input.value = foodText;
             dom.tabs.forEach(t => t.id === 'tab-manual' ? t.click() : null);
             await handleLogEntry();
@@ -531,8 +536,8 @@ async function getFoodFromImage(base64ImageData, mimeType) {
         throw new Error("API key is missing. Please add your Gemini API key to the `geminiApiKey` variable in config.js.");
     }
 
-    // **FIX:** Using the gemini-2.5-flash-preview-09-2025 model as requested
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+    // **FIX:** Using the correct, stable model for this task
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=${apiKey}`;
     const payload = { contents: [{ parts: [{ text: "You are a nutritional analyst. Your task is to identify all food items in this image. List them as a simple comma-separated string, e.g., 'sirloin steak, mashed potatoes, spinach, roti, dal'." }, { inlineData: { mimeType, data: base64ImageData } }] }] };
     
     const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -542,7 +547,10 @@ async function getFoodFromImage(base64ImageData, mimeType) {
     }
     const result = await response.json();
     const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error("Could not extract text from response.");
+    if (!text) {
+        console.error("No text returned from API. Full response:", result);
+        throw new Error("Could not extract text from response.");
+    }
     return text.trim();
 }
 
@@ -562,8 +570,8 @@ async function analyzeNutritionLabel(base64ImageData, mimeType) {
         throw new Error("API key is missing. Please add your Gemini API key to the `geminiApiKey` variable in config.js.");
     }
 
-    // **FIX:** Using the gemini-2.5-flash-preview-09-2025 model as requested
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+    // **FIX:** Using the correct, stable model for this task
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key=${apiKey}`;
     const payload = {
         contents: [{
             parts: [
@@ -579,7 +587,10 @@ async function analyzeNutritionLabel(base64ImageData, mimeType) {
     }
     const result = await response.json();
     const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error("Could not extract text from response.");
+    if (!text) {
+        console.error("No text returned from API. Full response:", result);
+        throw new Error("Could not extract text from response.");
+    }
     return text;
 }
 
@@ -755,6 +766,10 @@ const handleLogEntry = async () => {
     const text = dom.manualLog.input.value.trim();
     if (!text) return;
     const parsedItems = parseInput(text);
+    
+    // **DEBUGGING LOG**
+    console.log("Parsed items:", parsedItems);
+
     if (parsedItems.length === 0) {
         dom.manualLog.input.value = "Sorry, couldn't recognize that food. Try being more specific.";
         return;
@@ -840,6 +855,7 @@ function convertWordsToNumbers(text) {
     return text.replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|a|an)\b/gi, (match) => words[match.toLowerCase()]);
 }
 
+// **FIX:** This function is now more robust to find all items.
 function parseInput(text) {
     let remainingText = convertWordsToNumbers(text.toLowerCase().replace(/,/g, ' '));
     const foundItems = [];
@@ -849,6 +865,7 @@ function parseInput(text) {
     while(somethingFound && remainingText.trim().length > 0) {
         somethingFound = false;
         for (const { keyword, dbKey } of allKeywords) {
+            // This regex finds the keyword with an optional number and unit *before* it.
             const regex = new RegExp(`(\\d*\\.?\\d*)\\s*(?:servings?|cups?|oz|tbsp|slices?|large|medium|glass|pieces?)?\\s*(${keyword}s?)\\b`, 'i');
             const match = remainingText.match(regex);
 
@@ -859,14 +876,16 @@ function parseInput(text) {
                     dbKey: dbKey 
                 });
                 
-                remainingText = remainingText.replace(match[0], '');
+                // Replace the matched text with a space to prevent re-matching
+                remainingText = remainingText.replace(match[0], ' ');
                 somethingFound = true;
-                break; 
+                break; // Restart the for-loop to prioritize longest matches
             }
         }
     }
     return foundItems;
 }
+
 
 function analyzeFood(item) {
     const dbEntry = foodDatabase[item.dbKey];
@@ -1006,7 +1025,7 @@ function showDailySummary() {
     if (userProfile.monitoringPrefs.fat) totalsHTML += `<p><strong>Total Fat:</strong> <span class="font-bold ${totals.fat > healthGoals.fat ? 'text-red-600' : 'text-green-600'}">${totals.fat.toFixed(1)}</span> / ${healthGoals.fat} g</p>`;
     if (userProfile.monitoringPrefs.protein) totalsHTML += `<p><strong>Protein:</strong> <span class="font-bold ${totals.protein < healthGoals.protein ? 'text-amber-600' : 'text-green-600'}">${totals.protein.toFixed(1)}</span> / ${healthGoals.protein} g</p>`;
     if (userProfile.monitoringPrefs.fiber) totalsHTML += `<p><strong>Fiber:</strong> ${totals.fiber.toFixed(1)} g</p>`;
-    if (userProfile.monitoringPrefs.potassium) totalsHTML += `<p><strong>Potassium:</strong> <span class="font-bold ${totals.potassium < healthGoals.potassium ? 'text-amber-600' : 'text-green-600'}">${totals.potassium.toFixed(0)}</span> / ${healthGoals.potassium} mg</p>`;
+    if (userProfile.monitoringPrefs.potassium) totalsHTML += `<p><strong>Potassium:</strong> <span class_TEST="font-bold ${totals.potassium < healthGoals.potassium ? 'text-amber-600' : 'text-green-600'}">${totals.potassium.toFixed(0)}</span> / ${healthGoals.potassium} mg</p>`;
     
     let verdictsHTML = '';
     if (userProfile.monitoringPrefs.sodium) verdictsHTML += `<p><strong>BP (Sodium):</strong> <span class="font-bold text-${verdicts.bp.c.toLowerCase()}-600">${verdicts.bp.c}</span> - ${verdicts.bp.r}</p>`;
